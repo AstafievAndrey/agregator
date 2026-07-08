@@ -1,0 +1,28 @@
+{
+  "name": "agregator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio --port 5555 --browser none",
+    "telegram:login": "tsx src/scripts/telegram-login.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "bullmq": "^5.79.3",
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3",
+    "telegram": "^2.26.22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.15.6",
+    "prisma": "^7.8.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.0"
+  }
+}

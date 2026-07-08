@@ -1,0 +1,6 @@
+enum PostStatus {
+  PROCESSING
+  COLLECTED
+  ERROR
+  ARCHIVED
+}

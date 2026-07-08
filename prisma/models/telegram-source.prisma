@@ -1,0 +1,14 @@
+model TelegramSource {
+  id String @id @default(cuid())
+
+  sourceId String @unique
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  channelName String?
+  telegramId  BigInt?
+
+  lastSyncedMessageId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

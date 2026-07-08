@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+    container_name: agregator_app
+    env_file:
+      - .env
+    ports:
+      - "${PRISMA_STUDIO_PORT:-5555}:5555"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: tail -f /dev/null
+
+  telegram-worker:
+    build:
+      context: .
+    container_name: agregator_telegram_worker
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: npx tsx src/scripts/telegram-worker.ts
+    restart: unless-stopped
+
+  telegram-scheduler:
+    build:
+      context: .
+    container_name: agregator_telegram_scheduler
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: npx tsx src/scripts/telegram-scheduler.ts
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: agregator_postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    container_name: agregator_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

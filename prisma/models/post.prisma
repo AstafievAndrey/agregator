@@ -1,0 +1,18 @@
+model Post {
+  id         String  @id @default(cuid())
+  text       String?
+  externalId String
+
+  status PostStatus @default(PROCESSING)
+
+  sourceId String
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  attachments Attachment[]
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([sourceId, externalId])
+}

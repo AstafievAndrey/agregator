@@ -1,0 +1,13 @@
+model Source {
+  id     String       @id @default(cuid())
+  type   SourceType
+  name   String
+  status SourceStatus @default(ACTIVE)
+
+  telegram TelegramSource?
+
+  posts Post[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

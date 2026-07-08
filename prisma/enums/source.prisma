@@ -1,0 +1,10 @@
+enum SourceType {
+  TELEGRAM
+}
+
+enum SourceStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+  ARCHIVED
+}
