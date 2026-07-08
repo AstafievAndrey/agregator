@@ -12,6 +12,8 @@ const env = Object.freeze({
     apiId: Number(process.env.TELEGRAM_API_ID),
     apiHash: process.env.TELEGRAM_API_HASH ?? "",
     session: process.env.TELEGRAM_SESSION ?? "",
+    botToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+    moderationChannelId: process.env.TELEGRAM_MODERATION_CHANNEL_ID ?? "",
   }),
 });
 

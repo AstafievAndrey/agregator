@@ -1,0 +1,16 @@
+model PostModeration {
+  id     String @id @default(cuid())
+  postId String @unique
+
+  status PostModerationStatus @default(PENDING)
+
+  draftText      String?
+  draftMessageId String?
+  sentAt         DateTime?
+  moderatedAt    DateTime?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

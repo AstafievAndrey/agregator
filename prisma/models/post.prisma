@@ -9,6 +9,7 @@ model Post {
   source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   attachments  Attachment[]
+  moderation   PostModeration?
   publications PostPublication[]
 
   publishedAt DateTime?

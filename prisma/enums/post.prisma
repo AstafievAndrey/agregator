@@ -15,3 +15,10 @@ enum PostPublicationStatus {
   FAILED
   CANCELED
 }
+
+enum PostModerationStatus {
+  PENDING
+  SENT
+  APPROVED
+  REJECTED
+}
