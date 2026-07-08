@@ -6,7 +6,8 @@ model Source {
 
   telegram TelegramSource?
 
-  posts Post[]
+  posts        Post[]
+  destinations SourceDestination[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

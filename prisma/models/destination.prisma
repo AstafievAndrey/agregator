@@ -1,0 +1,14 @@
+model Destination {
+  id     String            @id @default(cuid())
+  type   DestinationType
+  name   String
+  status DestinationStatus @default(ACTIVE)
+
+  telegram TelegramDestination?
+
+  sourceDestinations SourceDestination[]
+  publications       PostPublication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

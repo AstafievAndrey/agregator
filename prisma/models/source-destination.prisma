@@ -1,0 +1,12 @@
+model SourceDestination {
+  id            String @id @default(cuid())
+  sourceId      String
+  destinationId String
+
+  source      Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([sourceId, destinationId])
+}

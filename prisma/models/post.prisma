@@ -8,7 +8,8 @@ model Post {
   sourceId String
   source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
-  attachments Attachment[]
+  attachments  Attachment[]
+  publications PostPublication[]
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())

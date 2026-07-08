@@ -1,0 +1,9 @@
+enum DestinationType {
+  TELEGRAM
+}
+
+enum DestinationStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}

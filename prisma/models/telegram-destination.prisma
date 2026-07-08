@@ -1,0 +1,14 @@
+model TelegramDestination {
+  id            String @id @default(cuid())
+  destinationId String @unique
+
+  name        String
+  channelId   String
+  channelName String?
+  metadata    Json?
+
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

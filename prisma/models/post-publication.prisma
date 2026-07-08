@@ -1,0 +1,19 @@
+model PostPublication {
+  id                    String                @id @default(cuid())
+  postId                String
+  destinationId         String
+  status                PostPublicationStatus @default(PENDING)
+  externalPublicationId String?
+
+  publishedAt  DateTime?
+  failedAt     DateTime?
+  errorMessage String?
+
+  post        Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([postId, destinationId])
+}
