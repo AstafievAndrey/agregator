@@ -1,8 +1,9 @@
 model Attachment {
-  id             String  @id @default(cuid())
-  telegramFileId String?
-  fileName       String?
-  mimeType       String?
+  id                String  @id @default(cuid())
+  telegramFileId    String?
+  telegramMessageId Int?
+  fileName          String?
+  mimeType          String?
 
   sizeBytes BigInt?
 

@@ -10,14 +10,11 @@ export async function enqueueCollectedPostsForModeration(
 ): Promise<void> {
   const closeConnections = options.closeConnections ?? true;
 
-  // Берем только посты, которые уже собраны, но еще не отправлялись на модерацию.
-  // moderation: null защищает от повторной постановки задачи для уже обработанного поста.
+  // Берем только собранные посты, которые еще не отправлялись на модерацию.
+  // Текст не обязателен: пост может состоять только из фото или видео.
   const posts = await prisma.post.findMany({
     where: {
       status: "COLLECTED",
-      text: {
-        not: null,
-      },
       moderation: null,
     },
     select: {
@@ -29,7 +26,7 @@ export async function enqueueCollectedPostsForModeration(
   });
 
   for (const post of posts) {
-    // Стабильный jobId нужен, чтобы один и тот же пост не оказался в очереди несколько раз.
+    // Стабильный jobId не дает одному и тому же посту попасть в очередь несколько раз.
     const jobId = getModerationJobId(post.id);
     const existingJob = await moderationQueue.getJob(jobId);
 
@@ -41,7 +38,7 @@ export async function enqueueCollectedPostsForModeration(
         continue;
       }
 
-      // Завершенную/упавшую старую задачу убираем, чтобы BullMQ разрешил создать новую с тем же jobId.
+      // Старую завершенную/упавшую задачу удаляем, чтобы BullMQ разрешил создать новую.
       await existingJob.remove();
     }
 
@@ -52,7 +49,7 @@ export async function enqueueCollectedPostsForModeration(
       },
       {
         jobId,
-        // Если Telegram временно недоступен, BullMQ сам повторит отправку.
+        // Если Telegram временно недоступен, BullMQ повторит отправку с задержкой.
         attempts: 5,
         backoff: {
           type: "exponential",
@@ -67,7 +64,7 @@ export async function enqueueCollectedPostsForModeration(
   }
 
   if (closeConnections) {
-    // closeConnections нужен для одноразовых scripts. Scheduler держит соединения открытыми.
+    // Одноразовые scripts должны закрывать соединения. Scheduler держит их открытыми.
     await moderationQueue.close();
     await prisma.$disconnect();
   }

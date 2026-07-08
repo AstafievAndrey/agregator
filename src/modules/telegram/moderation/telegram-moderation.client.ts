@@ -1,24 +1,53 @@
+import { openAsBlob } from "node:fs";
 import env from "@/app/env";
+
+export type ModerationMediaFile = {
+  type: "PHOTO" | "VIDEO";
+  path: string;
+  fileName: string;
+  mimeType: string;
+};
+
+type SendPostToModerationChannelParams = {
+  postId: string;
+  text: string | null;
+  mediaFiles: ModerationMediaFile[];
+};
 
 type TelegramInlineKeyboardButton = {
   text: string;
   callback_data: string;
 };
 
-type SendMessageResponse = {
+type TelegramMessageResult = {
+  message_id: number;
+};
+
+type TelegramApiResponse<T> = {
   ok: boolean;
   description?: string;
-  result?: {
-    message_id: number;
-  };
+  result?: T;
 };
 
 export async function sendPostToModerationChannel(
-  postId: string,
-  text: string,
+  params: SendPostToModerationChannelParams,
 ): Promise<number> {
-  // Эти переменные нужны только moderation worker, поэтому проверяем их здесь,
-  // а не в общем env.ts. Так collector и Prisma-команды могут работать без бота.
+  assertModerationEnv();
+
+  if (params.mediaFiles.length === 0) {
+    return sendModerationTextMessage(params);
+  }
+
+  if (params.mediaFiles.length === 1) {
+    return sendSingleMediaMessage(params, params.mediaFiles[0]);
+  }
+
+  return sendMediaAlbumWithControlMessage(params);
+}
+
+function assertModerationEnv(): void {
+  // Эти переменные нужны только модерации.
+  // Поэтому проверяем их здесь, а не при старте всего приложения.
   if (!env.telegram.botToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is required");
   }
@@ -26,43 +55,112 @@ export async function sendPostToModerationChannel(
   if (!env.telegram.moderationChannelId) {
     throw new Error("TELEGRAM_MODERATION_CHANNEL_ID is required");
   }
+}
 
-  // Пока используем прямой Telegram Bot API через fetch.
-  // Для первой версии этого достаточно: отправить текст и две inline-кнопки.
-  const response = await fetch(
-    `https://api.telegram.org/bot${env.telegram.botToken}/sendMessage`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_id: env.telegram.moderationChannelId,
-        text,
-        reply_markup: {
-          inline_keyboard: [
-            [
-              // В callback_data кладем postId, чтобы будущий bot handler понял,
-              // какой именно пост нужно опубликовать или отклонить.
-              createCallbackButton("Опубликовать", `publish:${postId}`),
-              createCallbackButton("Отклонить", `reject:${postId}`),
-            ],
-          ],
-        },
-      }),
-    },
-  );
+async function sendModerationTextMessage(
+  params: SendPostToModerationChannelParams,
+): Promise<number> {
+  const text = params.text?.trim() || "Пост без текста";
 
-  const data = (await response.json()) as SendMessageResponse;
+  const response = await postJson<TelegramMessageResult>("sendMessage", {
+    chat_id: env.telegram.moderationChannelId,
+    text,
+    reply_markup: createModerationKeyboard(params.postId),
+  });
 
-  // Telegram Bot API может вернуть HTTP 200, но ok=false внутри JSON.
-  // Проверяем оба признака, чтобы ошибка не потерялась.
-  if (!response.ok || !data.ok || !data.result) {
-    throw new Error(data.description ?? "Failed to send moderation message");
+  return response.message_id;
+}
+
+async function sendSingleMediaMessage(
+  params: SendPostToModerationChannelParams,
+  mediaFile: ModerationMediaFile,
+): Promise<number> {
+  const formData = new FormData();
+  const mediaFieldName = mediaFile.type === "PHOTO" ? "photo" : "video";
+  const method = mediaFile.type === "PHOTO" ? "sendPhoto" : "sendVideo";
+
+  formData.append("chat_id", env.telegram.moderationChannelId);
+  formData.append(mediaFieldName, await createFileBlob(mediaFile), mediaFile.fileName);
+
+  if (params.text?.trim()) {
+    formData.append("caption", params.text);
   }
 
-  // message_id сохраняем в PostModeration, чтобы связать запись в БД с сообщением в черновом канале.
-  return data.result.message_id;
+  formData.append("reply_markup", JSON.stringify(createModerationKeyboard(params.postId)));
+
+  const response = await postFormData<TelegramMessageResult>(method, formData);
+
+  return response.message_id;
+}
+
+async function sendMediaAlbumWithControlMessage(
+  params: SendPostToModerationChannelParams,
+): Promise<number> {
+  const formData = new FormData();
+  const media = [];
+
+  formData.append("chat_id", env.telegram.moderationChannelId);
+
+  for (const [index, mediaFile] of params.mediaFiles.entries()) {
+    const fieldName = `file${index}`;
+
+    formData.append(fieldName, await createFileBlob(mediaFile), mediaFile.fileName);
+    media.push({
+      type: mediaFile.type === "PHOTO" ? "photo" : "video",
+      media: `attach://${fieldName}`,
+    });
+  }
+
+  formData.append("media", JSON.stringify(media));
+
+  // Telegram Bot API не умеет вешать одну inline-клавиатуру на весь альбом.
+  // Поэтому сначала отправляем альбом, а затем сообщение управления с кнопками.
+  const albumMessages = await postFormData<TelegramMessageResult[]>(
+    "sendMediaGroup",
+    formData,
+  );
+  const firstAlbumMessageId = albumMessages[0]?.message_id;
+
+  const controlMessage = await postJson<TelegramMessageResult>("sendMessage", {
+    chat_id: env.telegram.moderationChannelId,
+    text: getControlMessageText(params),
+    reply_parameters: firstAlbumMessageId
+      ? {
+          message_id: firstAlbumMessageId,
+        }
+      : undefined,
+    reply_markup: createModerationKeyboard(params.postId),
+  });
+
+  return controlMessage.message_id;
+}
+
+async function createFileBlob(mediaFile: ModerationMediaFile): Promise<Blob> {
+  // openAsBlob позволяет передать файл в FormData без постоянного хранения в проекте.
+  return openAsBlob(mediaFile.path, {
+    type: mediaFile.mimeType,
+  });
+}
+
+function getControlMessageText(params: SendPostToModerationChannelParams): string {
+  const text = params.text?.trim();
+
+  if (text) {
+    return text;
+  }
+
+  return `Пост без текста. Вложений: ${params.mediaFiles.length}`;
+}
+
+function createModerationKeyboard(postId: string) {
+  return {
+    inline_keyboard: [
+      [
+        createCallbackButton("Опубликовать", `publish:${postId}`),
+        createCallbackButton("Отклонить", `reject:${postId}`),
+      ],
+    ],
+  };
 }
 
 function createCallbackButton(
@@ -73,4 +171,41 @@ function createCallbackButton(
     text,
     callback_data: callbackData,
   };
+}
+
+async function postJson<T>(method: string, body: unknown): Promise<T> {
+  const response = await fetch(getBotApiUrl(method), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  return parseTelegramResponse<T>(response);
+}
+
+async function postFormData<T>(method: string, formData: FormData): Promise<T> {
+  const response = await fetch(getBotApiUrl(method), {
+    method: "POST",
+    body: formData,
+  });
+
+  return parseTelegramResponse<T>(response);
+}
+
+async function parseTelegramResponse<T>(response: Response): Promise<T> {
+  const data = (await response.json()) as TelegramApiResponse<T>;
+
+  // Bot API может вернуть HTTP 200, но ok=false внутри JSON.
+  // Проверяем оба уровня, чтобы ошибка была видна в логах worker.
+  if (!response.ok || !data.ok || !data.result) {
+    throw new Error(data.description ?? "Telegram Bot API request failed");
+  }
+
+  return data.result;
+}
+
+function getBotApiUrl(method: string): string {
+  return `https://api.telegram.org/bot${env.telegram.botToken}/${method}`;
 }

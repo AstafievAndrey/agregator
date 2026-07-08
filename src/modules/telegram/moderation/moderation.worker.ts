@@ -23,7 +23,7 @@ export function startModerationWorker(): Worker<SendPostToModerationJobData> {
   );
 
   worker.on("failed", (job, error) => {
-    // Ошибку не глотаем: BullMQ увидит failed job и применит attempts/backoff из enqueue.
+    // Ошибку не глотаем: BullMQ увидит failed job и применит attempts/backoff.
     console.error(`Moderation job failed: ${job?.id}`);
     console.error(error);
   });

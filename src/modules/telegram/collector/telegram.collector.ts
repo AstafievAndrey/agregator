@@ -303,6 +303,7 @@ function getAttachment(message: TelegramMessage) {
     return {
       type: "PHOTO" as const,
       telegramFileId: getObjectId(photo) ?? String(message.id),
+      telegramMessageId: message.id,
       fileName: null,
       mimeType: null,
       sizeBytes: getPhotoSizeBytes(photoSize),
@@ -320,6 +321,7 @@ function getAttachment(message: TelegramMessage) {
     return {
       type: "VIDEO" as const,
       telegramFileId: getObjectId(video) ?? String(message.id),
+      telegramMessageId: message.id,
       fileName: getDocumentFileName(video),
       mimeType: getString(video, "mimeType"),
       sizeBytes: getBigInt(video, "size"),
