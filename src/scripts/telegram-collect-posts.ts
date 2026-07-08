@@ -1,3 +1,3 @@
-import { collectTelegramPosts } from "@/modules/telegram/telegram.collector";
+import { collectTelegramPosts } from "@/modules/telegram/collector/telegram.collector";
 
 await collectTelegramPosts();

@@ -1,7 +1,7 @@
 import { Job, Worker } from "bullmq";
 import { redisConnection } from "@/app/queue";
-import { SendPostToModerationJobData } from "@/modules/moderation/moderation.queue";
-import { sendPostToModeration } from "@/modules/moderation/moderation.service";
+import { SendPostToModerationJobData } from "@/modules/telegram/moderation/moderation.queue";
+import { sendPostToModeration } from "@/modules/telegram/moderation/moderation.service";
 
 export function startModerationWorker(): Worker<SendPostToModerationJobData> {
   // Worker постоянно слушает очередь moderation и выполняет задачи по одной.

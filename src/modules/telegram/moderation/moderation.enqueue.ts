@@ -1,5 +1,5 @@
 import prisma from "@/app/prisma";
-import { moderationQueue } from "@/modules/moderation/moderation.queue";
+import { moderationQueue } from "@/modules/telegram/moderation/moderation.queue";
 
 type EnqueueCollectedPostsOptions = {
   closeConnections?: boolean;

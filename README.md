@@ -29,17 +29,8 @@ Run migrations:
 docker compose exec app npm run prisma:migrate
 ```
 
-Open Prisma Studio:
-
-```bash
-docker compose exec app npm run prisma:studio
-```
-
-Then open `http://localhost:5555`.
-
 ## Services
 
-- Prisma Studio: `http://localhost:5555`
 - PostgreSQL: `localhost:5433`
 
 ## Useful Commands

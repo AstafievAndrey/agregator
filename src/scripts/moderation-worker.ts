@@ -1,4 +1,4 @@
-import { startModerationWorker } from "@/modules/moderation/moderation.worker";
+import { startModerationWorker } from "@/modules/telegram/moderation/moderation.worker";
 
 startModerationWorker();
 

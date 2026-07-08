@@ -1,4 +1,4 @@
-import { enqueueCollectedPostsForModeration } from "@/modules/moderation/moderation.enqueue";
+import { enqueueCollectedPostsForModeration } from "@/modules/telegram/moderation/moderation.enqueue";
 
 const enqueueIntervalMs = 30_000;
 

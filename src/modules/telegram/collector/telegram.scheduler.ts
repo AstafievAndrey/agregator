@@ -1,4 +1,4 @@
-import { enqueueActiveTelegramSources } from "@/modules/telegram/telegram.enqueue";
+import { enqueueActiveTelegramSources } from "@/modules/telegram/collector/telegram.enqueue";
 
 const enqueueIntervalMs = 30_000;
 

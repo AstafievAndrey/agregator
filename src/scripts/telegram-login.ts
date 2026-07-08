@@ -1,4 +1,4 @@
-import { loginTelegram } from "@/modules/telegram/telegram.auth";
+import { loginTelegram } from "@/modules/telegram/collector/telegram.auth";
 
 const session = await loginTelegram();
 

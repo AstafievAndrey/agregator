@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { inspect } from "node:util";
-import { createTelegramClient } from "@/modules/telegram/telegram.client";
+import { createTelegramClient } from "@/modules/telegram/collector/telegram.client";
 
 const channelName = "test_channel_monit";
 

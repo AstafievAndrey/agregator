@@ -1,5 +1,5 @@
 import prisma from "@/app/prisma";
-import { telegramQueue } from "@/modules/telegram/telegram.queue";
+import { telegramQueue } from "@/modules/telegram/collector/telegram.queue";
 
 type EnqueueActiveTelegramSourcesOptions = {
   closeConnections?: boolean;

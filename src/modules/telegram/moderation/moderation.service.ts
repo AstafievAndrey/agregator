@@ -1,5 +1,5 @@
 import prisma from "@/app/prisma";
-import { sendPostToModerationChannel } from "@/modules/moderation/telegram-moderation.client";
+import { sendPostToModerationChannel } from "@/modules/telegram/moderation/telegram-moderation.client";
 
 export async function sendPostToModeration(postId: string): Promise<void> {
   // Загружаем moderation вместе с post, чтобы повторно не отправить уже обработанный пост.

@@ -5,8 +5,6 @@ services:
     container_name: agregator_app
     env_file:
       - .env
-    ports:
-      - "${PRISMA_STUDIO_PORT:-5555}:5555"
     volumes:
       - .:/app
       - /app/node_modules

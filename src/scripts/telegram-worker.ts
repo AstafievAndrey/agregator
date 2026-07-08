@@ -1,4 +1,4 @@
-import { startTelegramWorker } from "@/modules/telegram/telegram.worker";
+import { startTelegramWorker } from "@/modules/telegram/collector/telegram.worker";
 
 startTelegramWorker();
 

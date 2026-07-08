@@ -1,7 +1,7 @@
 import { Job, Worker } from "bullmq";
 import { redisConnection } from "@/app/queue";
-import { collectTelegramSource } from "@/modules/telegram/telegram.collector";
-import { CollectTelegramSourceJobData } from "@/modules/telegram/telegram.queue";
+import { collectTelegramSource } from "@/modules/telegram/collector/telegram.collector";
+import { CollectTelegramSourceJobData } from "@/modules/telegram/collector/telegram.queue";
 
 export function startTelegramWorker(): Worker<CollectTelegramSourceJobData> {
   const worker = new Worker<CollectTelegramSourceJobData>(

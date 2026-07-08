@@ -1,5 +1,5 @@
 import prisma from "@/app/prisma";
-import { createTelegramClient } from "@/modules/telegram/telegram.client";
+import { createTelegramClient } from "@/modules/telegram/collector/telegram.client";
 
 const freshMessageDelaySeconds = 60;
 

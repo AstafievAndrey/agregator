@@ -1,4 +1,4 @@
-import { startTelegramScheduler } from "@/modules/telegram/telegram.scheduler";
+import { startTelegramScheduler } from "@/modules/telegram/collector/telegram.scheduler";
 
 startTelegramScheduler();
 

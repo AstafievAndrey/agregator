@@ -1,4 +1,4 @@
-import { startModerationScheduler } from "@/modules/moderation/moderation.scheduler";
+import { startModerationScheduler } from "@/modules/telegram/moderation/moderation.scheduler";
 
 startModerationScheduler();
 
