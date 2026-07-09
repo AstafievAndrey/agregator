@@ -66,6 +66,39 @@ const telegramDestinations: TelegramDestinationSeed[] = [
       },
     ],
   },
+  {
+    id: "telegram_realbrainrotdaily",
+    name: "Real Brain Rot Daily",
+    channelId: "-1004460851552",
+    channelName: "realbrainrotdaily",
+    sources: [
+      {
+        id: "telegram_thememetimes",
+        name: "thememetimes",
+        channelName: "thememetimes",
+      },
+      {
+        id: "telegram_funnyvideos",
+        name: "funnyvideos",
+        channelName: "funnyvideos",
+      },
+      {
+        id: "telegram_memeburst9",
+        name: "memeburst9",
+        channelName: "memeburst9",
+      },
+      {
+        id: "telegram_guffawbox",
+        name: "guffawbox",
+        channelName: "guffawbox",
+      },
+      {
+        id: "telegram_laughquake_und",
+        name: "laughquake_und",
+        channelName: "laughquake_und",
+      },
+    ],
+  },
 ];
 
 export async function seedTelegramSources(): Promise<void> {

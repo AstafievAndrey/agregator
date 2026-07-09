@@ -29,7 +29,9 @@ type PublicationWithPost = NonNullable<
   };
 };
 
-export async function publishPostPublication(publicationId: string): Promise<void> {
+export async function publishPostPublication(
+  publicationId: string,
+): Promise<void> {
   const publication = await prisma.postPublication.findUnique({
     where: {
       id: publicationId,
@@ -64,7 +66,9 @@ export async function publishPostPublication(publicationId: string): Promise<voi
   }
 
   if (publication.status === "PUBLISHED" || publication.status === "CANCELED") {
-    console.log(`Skip publication ${publication.id}: already ${publication.status}`);
+    console.log(
+      `Skip publication ${publication.id}: already ${publication.status}`,
+    );
     return;
   }
 
@@ -75,8 +79,14 @@ export async function publishPostPublication(publicationId: string): Promise<voi
     return;
   }
 
-  if (typedPublication.destination.type !== "TELEGRAM" || !typedPublication.destination.telegram) {
-    await failPublication(typedPublication.id, "Telegram destination is not configured");
+  if (
+    typedPublication.destination.type !== "TELEGRAM" ||
+    !typedPublication.destination.telegram
+  ) {
+    await failPublication(
+      typedPublication.id,
+      "Telegram destination is not configured",
+    );
     return;
   }
 
@@ -94,7 +104,10 @@ export async function publishPostPublication(publicationId: string): Promise<voi
   const tempDirectory = await mkdtemp(join(tmpdir(), "agregator-publication-"));
 
   try {
-    const mediaFiles = await downloadPostMedia(typedPublication.post, tempDirectory);
+    const mediaFiles = await downloadPostMedia(
+      typedPublication.post,
+      tempDirectory,
+    );
     const externalPublicationId = await sendPostToTelegramDestination({
       channelId: typedPublication.destination.telegram.channelId,
       text: getPublicationTextWithFooter(typedPublication),
@@ -116,7 +129,9 @@ export async function publishPostPublication(publicationId: string): Promise<voi
   }
 }
 
-function getPublicationTextWithFooter(publication: PublicationWithPost): string | null {
+function getPublicationTextWithFooter(
+  publication: PublicationWithPost,
+): string | null {
   const text = publication.post.moderation?.draftText ?? publication.post.text;
   const footer = getPublicationFooter(publication);
 
@@ -138,22 +153,40 @@ function getPublicationFooter(publication: PublicationWithPost): string | null {
     return null;
   }
 
-  const metadataFooter = getMetadataString(telegramDestination.metadata, "footerText");
+  const metadataFooter = getMetadataString(
+    telegramDestination.metadata,
+    "footerText",
+  );
 
   if (metadataFooter) {
     return metadataFooter;
   }
 
   const title = telegramDestination.name || publication.destination.name;
-  const url =
-    getMetadataString(telegramDestination.metadata, "footerUrl") ??
-    getTelegramChannelUrl(telegramDestination.channelName);
+  const footerUrl = getMetadataString(
+    telegramDestination.metadata,
+    "footerUrl",
+  );
 
-  if (!url) {
-    return title ? `Источник: ${title}` : null;
+  if (footerUrl) {
+    return title ? `${title}: ${footerUrl}` : footerUrl;
   }
 
-  return title ? `${title}: ${url}` : url;
+  const channelName = telegramDestination.channelName;
+
+  if (title && channelName) {
+    return `${title} • @${channelName}`;
+  }
+
+  if (title) {
+    return title;
+  }
+
+  if (channelName) {
+    return `@${channelName}`;
+  }
+
+  return null;
 }
 
 function getTelegramChannelUrl(channelName: string | null): string | null {
@@ -238,7 +271,10 @@ async function cancelPublication(
   });
 }
 
-async function failPublication(publicationId: string, reason: string): Promise<void> {
+async function failPublication(
+  publicationId: string,
+  reason: string,
+): Promise<void> {
   await prisma.postPublication.update({
     where: {
       id: publicationId,
