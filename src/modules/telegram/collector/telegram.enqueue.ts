@@ -1,4 +1,5 @@
 import prisma from "@/app/prisma";
+import env from "@/app/env";
 import { telegramQueue } from "@/modules/telegram/collector/telegram.queue";
 
 type EnqueueActiveTelegramSourcesOptions = {
@@ -45,7 +46,7 @@ export async function enqueueActiveTelegramSources(
         attempts: 5,
         backoff: {
           type: "exponential",
-          delay: 30_000,
+          delay: env.telegram.retryBackoffMs,
         },
         removeOnComplete: true,
         removeOnFail: 100,

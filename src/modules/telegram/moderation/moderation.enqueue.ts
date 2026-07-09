@@ -1,4 +1,5 @@
 import prisma from "@/app/prisma";
+import env from "@/app/env";
 import { moderationQueue } from "@/modules/telegram/moderation/moderation.queue";
 
 type EnqueueCollectedPostsOptions = {
@@ -15,7 +16,16 @@ export async function enqueueCollectedPostsForModeration(
   const posts = await prisma.post.findMany({
     where: {
       status: "COLLECTED",
-      moderation: null,
+      OR: [
+        {
+          moderation: null,
+        },
+        {
+          moderation: {
+            status: "PENDING",
+          },
+        },
+      ],
     },
     select: {
       id: true,
@@ -53,7 +63,7 @@ export async function enqueueCollectedPostsForModeration(
         attempts: 5,
         backoff: {
           type: "exponential",
-          delay: 30_000,
+          delay: env.telegram.retryBackoffMs,
         },
         removeOnComplete: true,
         removeOnFail: 100,

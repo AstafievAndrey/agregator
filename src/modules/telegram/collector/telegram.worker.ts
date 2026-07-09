@@ -1,4 +1,5 @@
 import { Job, Worker } from "bullmq";
+import env from "@/app/env";
 import { redisConnection } from "@/app/queue";
 import { collectTelegramSource } from "@/modules/telegram/collector/telegram.collector";
 import { CollectTelegramSourceJobData } from "@/modules/telegram/collector/telegram.queue";
@@ -16,7 +17,7 @@ export function startTelegramWorker(): Worker<CollectTelegramSourceJobData> {
     },
     {
       connection: redisConnection,
-      concurrency: 1,
+      concurrency: env.telegram.collectorConcurrency,
     },
   );
 

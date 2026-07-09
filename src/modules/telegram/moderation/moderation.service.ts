@@ -7,15 +7,17 @@ import {
   ModerationMediaFile,
   sendPostToModerationChannel,
 } from "@/modules/telegram/moderation/telegram-moderation.client";
+import { preparePostTextForModeration } from "@/modules/telegram/moderation/moderation-text.service";
 
-type DownloadedMediaFile = ModerationMediaFile & {
+export type DownloadedMediaFile = ModerationMediaFile & {
   path: string;
 };
 
-type PostForModeration = NonNullable<
+export type PostWithTelegramMedia = NonNullable<
   Awaited<ReturnType<typeof prisma.post.findUnique>>
 > & {
   attachments: Array<{
+    id: string;
     type: "PHOTO" | "VIDEO";
     position: number;
     telegramMessageId: number | null;
@@ -23,6 +25,7 @@ type PostForModeration = NonNullable<
     fileName: string | null;
   }>;
   source: {
+    name: string;
     telegram: {
       channelName: string | null;
     } | null;
@@ -56,8 +59,13 @@ export async function sendPostToModeration(postId: string): Promise<void> {
     return;
   }
 
-  if (post.status !== "COLLECTED" || post.moderation) {
+  if (post.status !== "COLLECTED") {
     console.log(`Skip moderation: post ${post.id} is already processed`);
+    return;
+  }
+
+  if (post.moderation && post.moderation.status !== "PENDING") {
+    console.log(`Skip moderation: post ${post.id} is already ${post.moderation.status}`);
     return;
   }
 
@@ -69,13 +77,38 @@ export async function sendPostToModeration(postId: string): Promise<void> {
   const tempDirectory = await mkdtemp(join(tmpdir(), "agregator-media-"));
 
   try {
-    const mediaFiles = await downloadPostMedia(post as PostForModeration, tempDirectory);
+    const mediaFiles = await downloadPostMedia(post as PostWithTelegramMedia, tempDirectory);
+    const draftText =
+      post.moderation?.draftText ??
+      (await preparePostTextForModeration(post.text, {
+        sourceName: post.source.name,
+        sourceChannelName: post.source.telegram?.channelName,
+      }));
+
+    if (!post.moderation) {
+      await prisma.postModeration.create({
+        data: {
+          postId: post.id,
+          status: "PENDING",
+          draftText,
+        },
+      });
+    } else if (!post.moderation.draftText && draftText) {
+      await prisma.postModeration.update({
+        where: {
+          postId: post.id,
+        },
+        data: {
+          draftText,
+        },
+      });
+    }
 
     // Сначала отправляем пост в Telegram. Внешний API нельзя откатить транзакцией БД,
     // поэтому состояние базы меняем только после успешной отправки.
     const draftMessageId = await sendPostToModerationChannel({
       postId: post.id,
-      text: post.text,
+      text: draftText,
       mediaFiles,
     });
 
@@ -83,10 +116,13 @@ export async function sendPostToModeration(postId: string): Promise<void> {
     // 1. У поста появилась запись модерации.
     // 2. Пост больше не должен попадать в выборку COLLECTED.
     await prisma.$transaction([
-      prisma.postModeration.create({
-        data: {
+      prisma.postModeration.update({
+        where: {
           postId: post.id,
+        },
+        data: {
           status: "SENT",
+          draftText,
           draftMessageId: String(draftMessageId),
           sentAt: new Date(),
         },
@@ -112,8 +148,8 @@ export async function sendPostToModeration(postId: string): Promise<void> {
   }
 }
 
-async function downloadPostMedia(
-  post: PostForModeration,
+export async function downloadPostMedia(
+  post: PostWithTelegramMedia,
   tempDirectory: string,
 ): Promise<DownloadedMediaFile[]> {
   if (post.attachments.length === 0) {
@@ -132,17 +168,37 @@ async function downloadPostMedia(
 
   try {
     const files: DownloadedMediaFile[] = [];
+    const albumMessageIds = await getAlbumMessageIdsForPost(
+      client,
+      channelName,
+      post.externalId,
+    );
 
     for (const attachment of post.attachments) {
       // Для новых вложений берем telegramMessageId из Attachment.
       // Для старых одиночных постов можем восстановить id из externalId вида message:123.
+      // Для старых альбомов ищем сообщения по groupedId и берем id по позиции вложения.
       const telegramMessageId =
-        attachment.telegramMessageId ?? getMessageIdFromExternalId(post.externalId);
+        attachment.telegramMessageId ??
+        getMessageIdFromExternalId(post.externalId) ??
+        albumMessageIds[attachment.position] ??
+        null;
 
       if (!telegramMessageId) {
         throw new Error(
           `Cannot download attachment ${attachment.position}: telegramMessageId is empty`,
         );
+      }
+
+      if (!attachment.telegramMessageId) {
+        await prisma.attachment.update({
+          where: {
+            id: attachment.id,
+          },
+          data: {
+            telegramMessageId,
+          },
+        });
       }
 
       const messages = await client.getMessages(channelName, {
@@ -185,6 +241,45 @@ function getMessageIdFromExternalId(externalId: string): number | null {
   const match = /^message:(\d+)$/.exec(externalId);
 
   return match ? Number(match[1]) : null;
+}
+
+async function getAlbumMessageIdsForPost(
+  client: ReturnType<typeof createTelegramClient>,
+  channelName: string,
+  externalId: string,
+): Promise<number[]> {
+  const groupedId = getGroupedIdFromExternalId(externalId);
+
+  if (!groupedId) {
+    return [];
+  }
+
+  const messageIds: number[] = [];
+
+  // Fallback нужен для постов, которые были собраны до появления telegramMessageId.
+  // Ищем альбом среди недавних сообщений канала по Telegram groupedId.
+  for await (const message of client.iterMessages(channelName, {
+    limit: 200,
+  })) {
+    const telegramMessage = message as {
+      id?: number;
+      groupedId?: unknown;
+    };
+
+    if (String(telegramMessage.groupedId) !== groupedId || !telegramMessage.id) {
+      continue;
+    }
+
+    messageIds.push(telegramMessage.id);
+  }
+
+  return messageIds.sort((leftMessageId, rightMessageId) => leftMessageId - rightMessageId);
+}
+
+function getGroupedIdFromExternalId(externalId: string): string | null {
+  const match = /^album:(.+)$/.exec(externalId);
+
+  return match?.[1] ?? null;
 }
 
 function getTemporaryFileName(

@@ -1,6 +1,5 @@
 import { enqueueCollectedPostsForModeration } from "@/modules/telegram/moderation/moderation.enqueue";
-
-const enqueueIntervalMs = 30_000;
+import env from "@/app/env";
 
 export function startModerationScheduler(): void {
   // Первый запуск делаем сразу, чтобы не ждать 30 секунд после старта контейнера.
@@ -9,7 +8,7 @@ export function startModerationScheduler(): void {
   // Потом периодически проверяем, появились ли новые COLLECTED-посты.
   setInterval(() => {
     void enqueuePosts();
-  }, enqueueIntervalMs);
+  }, env.telegram.moderationIntervalMs);
 }
 
 async function enqueuePosts(): Promise<void> {

@@ -1,7 +1,6 @@
 import prisma from "@/app/prisma";
+import env from "@/app/env";
 import { createTelegramClient } from "@/modules/telegram/collector/telegram.client";
-
-const freshMessageDelaySeconds = 60;
 
 type TelegramMessage = {
   id: number;
@@ -231,7 +230,7 @@ function isFreshMessage(message: TelegramMessage): boolean {
 
   const messageAgeSeconds = Date.now() / 1000 - message.date;
 
-  return messageAgeSeconds < freshMessageDelaySeconds;
+  return messageAgeSeconds < env.telegram.freshMessageDelaySeconds;
 }
 
 function groupMessages(messages: TelegramMessage[]): MessageGroup[] {

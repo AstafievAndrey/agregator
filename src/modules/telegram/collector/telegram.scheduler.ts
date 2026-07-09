@@ -1,13 +1,12 @@
 import { enqueueActiveTelegramSources } from "@/modules/telegram/collector/telegram.enqueue";
-
-const enqueueIntervalMs = 30_000;
+import env from "@/app/env";
 
 export function startTelegramScheduler(): void {
   void enqueueSources();
 
   setInterval(() => {
     void enqueueSources();
-  }, enqueueIntervalMs);
+  }, env.telegram.collectorIntervalMs);
 }
 
 async function enqueueSources(): Promise<void> {
