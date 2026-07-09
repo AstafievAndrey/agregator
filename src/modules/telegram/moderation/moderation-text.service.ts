@@ -17,24 +17,34 @@ export async function preparePostTextForModeration(
     return null;
   }
 
+  const locallyCleanedText = cleanTextLocally(originalText, sourceAliases);
+
+  if (shouldSkipModelProcessing(originalText)) {
+    return locallyCleanedText;
+  }
+
   if (!env.ai.ollamaEnabled) {
-    return cleanTextLocally(originalText, sourceAliases);
+    return locallyCleanedText;
   }
 
   try {
-    const processedText = cleanTextLocally(
-      normalizeModelOutput(
-        await generateWithOllama(createModerationTextPrompt(originalText, context)),
-      ),
-      sourceAliases,
+    const modelText = normalizeModelOutput(
+      await generateWithOllama(createModerationTextPrompt(originalText, context)),
     );
+    const processedText = cleanTextLocally(modelText, sourceAliases);
 
-    return processedText || cleanTextLocally(originalText, sourceAliases);
+    if (!processedText || isUnsafeModelRewrite(originalText, processedText)) {
+      console.warn("Ollama response looked unsafe, using local cleanup");
+
+      return locallyCleanedText;
+    }
+
+    return processedText;
   } catch (error) {
     console.error("Failed to process text with Ollama, using local cleanup");
     console.error(error);
 
-    return cleanTextLocally(originalText, sourceAliases);
+    return locallyCleanedText;
   }
 }
 
@@ -50,23 +60,21 @@ function createModerationTextPrompt(
 
   return [
     "Ты редактор Telegram-канала.",
-    "Подготовь пост к публикации в черновой канал модерации.",
+    "Твоя задача - аккуратно очистить исходный пост, а не написать новый.",
     "",
-    "Главная задача: очистить исходный Telegram-пост от внешних ссылок, рекламы, названий каналов-источников и мусорных CTA, сохранив смысл.",
-    "",
-    "Правила:",
-    "- Пиши на том же языке, что и исходный текст.",
+    "Жесткие правила:",
+    "- Нельзя добавлять новые факты, примеры, объяснения, списки, размеры, цифры, мнения или детали, которых нет в исходнике.",
+    "- Нельзя превращать короткую подпись в статью. Если исходник короткий, ответ тоже должен быть коротким.",
+    "- Сохрани смысл исходного текста. Допустима только легкая стилистическая правка.",
     "- Полностью удали URL и домены: https://..., http://..., t.me/..., telegram.me/..., site.com/path.",
-    "- Полностью удали Telegram-упоминания и названия каналов в формате @nameChannel, @channel_name, @name123.",
+    "- Удали markdown-ссылки вместе с текстом ссылки, если они ведут на внешний Telegram-канал.",
+    "- Удали Telegram-упоминания и названия каналов в формате @nameChannel, @channel_name, @name123.",
     sourceRule,
     "- Убери рекламные призывы, промокоды, саморекламу и приглашения подписаться.",
-    "- Удали остаточные CTA-строки без смысла: 'Подробнее', 'Читать далее', 'Источник', 'Подписаться', 'Смотреть', 'Перейти', даже если рядом больше нет ссылки.",
-    "- Если строка состояла только из эмодзи + CTA + ссылки/упоминания/названия канала, удали всю строку.",
-    "- Сохрани факты, имена, цифры и смысл. Ничего не выдумывай.",
-    "- Можно слегка перефразировать, чтобы текст звучал нейтрально и аккуратно.",
-    "- Добавь 2-5 релевантных хештегов в конце.",
-    "- Не добавляй пояснения, заголовки вроде 'Готовый текст' и markdown-обертки.",
-    "- Верни только финальный текст поста.",
+    "- Удали остаточные CTA-строки без смысла: 'Подробнее', 'Читать далее', 'Источник', 'Подписаться', 'Смотреть', 'Перейти'.",
+    "- Если после очистки остался нормальный текст, можно добавить 2-5 релевантных хештегов в конце.",
+    "- Если нормального текста нет, верни пустую строку.",
+    "- Верни только финальный текст поста без пояснений, заголовков и markdown-оберток.",
     "",
     "Исходный текст:",
     text,
@@ -78,7 +86,11 @@ function cleanTextLocally(
   sourceAliases: string[] = [],
 ): string | null {
   const cleanedText = text
-    ?.replace(/https?:\/\/\S+/gi, "")
+    ?.replace(/\[[^\]]{1,80}\]\((?:https?:\/\/)?(?:t\.me|telegram\.me)\/[^)]+\)/gi, "")
+    .replace(/\[[^\]]{1,80}\]\(https?:\/\/[^)]+\)/gi, "")
+    .replace(/\(\s*(?:https?:\/\/)?(?:t\.me|telegram\.me)\/[^)\s]+\s*\)/gi, "")
+    .replace(/\(\s*https?:\/\/[^)\s]+\s*\)/gi, "")
+    .replace(/https?:\/\/\S+/gi, "")
     .replace(/\b(?:t\.me|telegram\.me)\/\S+/gi, "")
     .replace(/\b[a-z0-9-]+\.(?:ru|com|net|org|io|me|news|app|dev)\/\S*/gi, "")
     .replace(/@\w+/g, "")
@@ -87,6 +99,9 @@ function cleanTextLocally(
     .replace(/^[^\p{L}\p{N}\n]*(?:жми|нажми|тапни|открыть|открывай|подписаться|подписывайся)[^\n]*$/gimu, "")
     .replace(/(?:подписывайтесь|подпишитесь|реклама|промокод|promo code|sponsored)[^\n]*/gi, "")
     .replace(/(?:подписывайся|рекламная интеграция|промо)[^\n]*/gi, "")
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\[\s*\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .split("\n")
@@ -103,6 +118,48 @@ function normalizeModelOutput(text: string): string {
     .replace(/```$/g, "")
     .replace(/^(?:готовый текст|финальный текст|пост):\s*/i, "")
     .trim();
+}
+
+function isUnsafeModelRewrite(originalText: string, processedText: string): boolean {
+  const originalWithoutLinks = cleanTextLocally(originalText) ?? originalText.trim();
+  const processedWithoutTags = processedText
+    .replace(/#[\p{L}\p{N}_-]+/gu, "")
+    .trim();
+
+  if (!processedWithoutTags) {
+    return false;
+  }
+
+  if (/^\s*\d+\.\s/m.test(processedWithoutTags)) {
+    return true;
+  }
+
+  if (/^\d+$/.test(processedWithoutTags) && /\p{L}/u.test(originalWithoutLinks)) {
+    return true;
+  }
+
+  if (
+    originalWithoutLinks.split(/\s+/).length >= 3 &&
+    processedWithoutTags.split(/\s+/).length <= 1
+  ) {
+    return true;
+  }
+
+  if (/(интересн(?:ые|ых) факт|ниже представлены|вот несколько|например)/iu.test(processedWithoutTags)) {
+    return true;
+  }
+
+  const originalLength = Math.max(originalWithoutLinks.length, 1);
+
+  if (originalLength < 160 && processedWithoutTags.length > originalLength * 2.2) {
+    return true;
+  }
+
+  return processedWithoutTags.split(/\s+/).length > originalWithoutLinks.split(/\s+/).length + 45;
+}
+
+function shouldSkipModelProcessing(text: string): boolean {
+  return text.length <= 120;
 }
 
 function getSourceAliases(context: PreparePostTextContext): string[] {
