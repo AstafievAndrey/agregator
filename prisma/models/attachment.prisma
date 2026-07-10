@@ -2,6 +2,7 @@ model Attachment {
   id                String  @id @default(cuid())
   telegramFileId    String?
   telegramMessageId Int?
+  externalUrl       String?
   fileName          String?
   mimeType          String?
 

@@ -5,6 +5,7 @@ model Source {
   status SourceStatus @default(ACTIVE)
 
   telegram TelegramSource?
+  reddit   RedditSource?
 
   posts        Post[]
   destinations SourceDestination[]

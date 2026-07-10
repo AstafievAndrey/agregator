@@ -1,5 +1,6 @@
 enum SourceType {
   TELEGRAM
+  REDDIT
 }
 
 enum SourceStatus {

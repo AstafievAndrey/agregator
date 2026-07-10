@@ -1,0 +1,17 @@
+model RedditSource {
+  id String @id @default(cuid())
+
+  sourceId String @unique
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  subreddit String
+  sort      String  @default("new")
+  minScore  Int     @default(0)
+  allowNsfw Boolean @default(false)
+  metadata  Json?
+
+  lastSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
