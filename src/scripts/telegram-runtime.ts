@@ -6,6 +6,8 @@ import { startModerationWorker } from "@/modules/telegram/moderation/moderation.
 import { startPublicationScheduler } from "@/modules/telegram/publication/publication.scheduler";
 import { startPublicationWorker } from "@/modules/telegram/publication/publication.worker";
 
+// Один runtime поднимает три независимых конвейера:
+// сбор постов, отправку в модерацию и публикацию одобренных материалов.
 startTelegramWorker();
 startTelegramScheduler();
 

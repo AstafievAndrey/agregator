@@ -101,6 +101,8 @@ async function collectTelegramSourceWithClient(
   console.log(`Last synced message id: ${lastSyncedMessageId ?? "empty"}`);
 
   if (lastSyncedMessageId === null) {
+    // При первом подключении не забираем всю историю канала: запоминаем текущую
+    // границу и начинаем собирать только сообщения, появившиеся после нее.
     const latestMessageId = await getLatestMessageId(client, channelName);
 
     if (latestMessageId === null) {
@@ -130,6 +132,7 @@ async function collectTelegramSourceWithClient(
     const telegramMessage = message as TelegramMessage;
 
     if (isFreshMessage(telegramMessage)) {
+      // Небольшая пауза нужна, чтобы успели прийти все элементы Telegram-альбома.
       console.log(`Stop on fresh message: ${telegramMessage.id}`);
       break;
     }
@@ -158,6 +161,8 @@ async function saveMessageGroups(
   messageGroups: MessageGroup[],
   newestMessageId: number,
 ): Promise<void> {
+  // Посты, вложения и новую границу синхронизации фиксируем атомарно.
+  // Если сохранение оборвется, следующий запуск безопасно попробует снова.
   await prisma.$transaction(async (transaction) => {
     for (const messageGroup of messageGroups) {
       const post = await transaction.post.upsert({
@@ -251,6 +256,7 @@ function groupMessages(messages: TelegramMessage[]): MessageGroup[] {
 }
 
 function getPostExternalId(message: TelegramMessage): string {
+  // У всех сообщений альбома один groupedId, поэтому в БД они становятся одним Post.
   if (message.groupedId) {
     return `album:${String(message.groupedId)}`;
   }

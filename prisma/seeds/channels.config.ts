@@ -22,6 +22,8 @@ export type TelegramChannelsConfig = {
   destinations: TelegramDestinationConfig[];
 };
 
+// Это единственное место, где вручную описываются связи:
+// источник Telegram -> канал назначения и, при необходимости, отдельный черновик.
 export const telegramChannelsConfig: TelegramChannelsConfig = {
   standaloneSources: [
     {

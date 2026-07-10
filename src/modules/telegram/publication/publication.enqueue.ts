@@ -11,6 +11,7 @@ export async function enqueuePendingPublications(
 ): Promise<void> {
   const closeConnections = options.closeConnections ?? true;
 
+  // PENDING-записи создаются после одобрения поста в канале модерации.
   const publications = await prisma.postPublication.findMany({
     where: {
       status: "PENDING",
@@ -40,6 +41,7 @@ export async function enqueuePublication(publicationId: string): Promise<void> {
   const jobId = getPublicationJobId(publicationId);
   const existingJob = await publicationQueue.getJob(jobId);
 
+  // Одна публикация не должна выполняться двумя worker одновременно.
   if (existingJob) {
     const state = await existingJob.getState();
 

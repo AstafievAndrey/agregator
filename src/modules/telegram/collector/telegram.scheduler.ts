@@ -2,6 +2,7 @@ import { enqueueActiveTelegramSources } from "@/modules/telegram/collector/teleg
 import env from "@/app/env";
 
 export function startTelegramScheduler(): void {
+  // Первый обход запускаем сразу, последующие - по интервалу из env.
   void enqueueSources();
 
   setInterval(() => {

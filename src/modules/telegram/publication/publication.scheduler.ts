@@ -2,6 +2,7 @@ import { enqueuePendingPublications } from "@/modules/telegram/publication/publi
 import env from "@/app/env";
 
 export function startPublicationScheduler(): void {
+  // Scheduler подбирает публикации, которые могли остаться в PENDING после перезапуска.
   void enqueuePublications();
 
   setInterval(() => {

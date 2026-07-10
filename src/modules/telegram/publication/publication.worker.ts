@@ -5,6 +5,7 @@ import { PublishPostJobData } from "@/modules/telegram/publication/publication.q
 import { publishPostPublication } from "@/modules/telegram/publication/publication.service";
 
 export function startPublicationWorker(): Worker<PublishPostJobData> {
+  // Worker отделяет медленную отправку в Telegram от обработки кнопки модерации.
   const worker = new Worker<PublishPostJobData>(
     "publication",
     async (job: Job<PublishPostJobData>) => {

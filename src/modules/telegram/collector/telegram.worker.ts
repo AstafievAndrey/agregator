@@ -5,6 +5,7 @@ import { collectTelegramSource } from "@/modules/telegram/collector/telegram.col
 import { CollectTelegramSourceJobData } from "@/modules/telegram/collector/telegram.queue";
 
 export function startTelegramWorker(): Worker<CollectTelegramSourceJobData> {
+  // Worker получает только sourceId, а актуальные настройки всегда читает из БД.
   const worker = new Worker<CollectTelegramSourceJobData>(
     "telegram",
     async (job: Job<CollectTelegramSourceJobData>) => {

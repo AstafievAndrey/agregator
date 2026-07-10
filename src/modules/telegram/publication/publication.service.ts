@@ -32,6 +32,7 @@ type PublicationWithPost = NonNullable<
 export async function publishPostPublication(
   publicationId: string,
 ): Promise<void> {
+  // Загружаем одним запросом текст после модерации, медиа и настройки назначения.
   const publication = await prisma.postPublication.findUnique({
     where: {
       id: publicationId,
@@ -90,6 +91,7 @@ export async function publishPostPublication(
     return;
   }
 
+  // PUBLISHING показывает диагностике, что задачу уже забрал worker.
   await prisma.postPublication.update({
     where: {
       id: typedPublication.id,
@@ -104,6 +106,7 @@ export async function publishPostPublication(
   const tempDirectory = await mkdtemp(join(tmpdir(), "agregator-publication-"));
 
   try {
+    // Медиа хранится локально только во время отправки и удаляется в finally.
     const mediaFiles = await downloadPostMedia(
       typedPublication.post,
       tempDirectory,
@@ -132,6 +135,7 @@ export async function publishPostPublication(
 function getPublicationTextWithFooter(
   publication: PublicationWithPost,
 ): string | null {
+  // Ручная правка из черновика имеет приоритет над исходным текстом поста.
   const text = publication.post.moderation?.draftText ?? publication.post.text;
   const footer = getPublicationFooter(publication);
 
@@ -228,6 +232,8 @@ async function markPublicationPublished(
 }
 
 async function markPostPublishedIfComplete(postId: string): Promise<void> {
+  // Общий Post становится PUBLISHED только после успешной отправки
+  // во все связанные с его источником направления.
   const failedOrPendingPublication = await prisma.postPublication.findFirst({
     where: {
       postId,

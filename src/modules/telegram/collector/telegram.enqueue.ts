@@ -11,6 +11,8 @@ export async function enqueueActiveTelegramSources(
 ): Promise<void> {
   const closeConnections = options.closeConnections ?? true;
 
+  // В очередь попадают только активные источники с заполненными Telegram-настройками.
+  // Само чтение канала выполняет worker, поэтому scheduler остается легким.
   const sources = await prisma.source.findMany({
     where: {
       type: "TELEGRAM",
@@ -25,6 +27,7 @@ export async function enqueueActiveTelegramSources(
     const jobId = getCollectSourceJobId(source.id);
     const existingJob = await telegramQueue.getJob(jobId);
 
+    // Постоянный jobId защищает источник от параллельного повторного сбора.
     if (existingJob) {
       const state = await existingJob.getState();
 
@@ -36,6 +39,7 @@ export async function enqueueActiveTelegramSources(
       await existingJob.remove();
     }
 
+    // Временные ошибки Telegram повторяются с увеличивающейся задержкой.
     await telegramQueue.add(
       "collect-source",
       {

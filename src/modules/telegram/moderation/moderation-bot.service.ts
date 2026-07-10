@@ -18,6 +18,8 @@ type ParsedCallbackData = {
 };
 
 export async function startModerationBot(): Promise<void> {
+  // offset хранится в памяти: Telegram не вернет уже обработанные update
+  // до следующего перезапуска процесса.
   let offset: number | undefined;
 
   console.log("Moderation bot polling started");
@@ -87,6 +89,7 @@ async function rejectPost(
   }
 
   if (post.moderation.status !== "SENT") {
+    // Повторный клик безопасен: состояние уже изменено, публикация не дублируется.
     await answerCallbackQuery(callbackQuery.id, "Пост уже обработан");
     await removeKeyboardIfPossible(callbackQuery);
     return;
@@ -174,6 +177,8 @@ async function approvePost(
     moderation.draftText ?? post.text,
   );
 
+  // Одной транзакцией подтверждаем модерацию и создаем публикации.
+  // Условие status=SENT защищает от двух почти одновременных нажатий.
   const publications = await prisma.$transaction(async (transaction) => {
     const updatedModeration = await transaction.postModeration.updateMany({
       where: {
@@ -242,6 +247,7 @@ function getEditedDraftText(
   callbackQuery: TelegramCallbackQuery,
   originalText: string | null,
 ): string | null {
+  // Модератор может отредактировать текст прямо в Telegram до нажатия кнопки.
   const currentText = stripServiceNotes(
     callbackQuery.message?.text ?? callbackQuery.message?.caption ?? null,
   );
