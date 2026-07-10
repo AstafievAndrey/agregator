@@ -10,6 +10,7 @@ export type ModerationMediaFile = {
 
 type SendPostToModerationChannelParams = {
   postId: string;
+  chatId: string;
   text: string | null;
   mediaFiles: ModerationMediaFile[];
 };
@@ -34,15 +35,32 @@ export async function sendPostToModerationChannel(
 ): Promise<number> {
   assertModerationEnv();
 
-  if (params.mediaFiles.length === 0) {
-    return sendModerationTextMessage(params);
-  }
+  try {
+    if (params.mediaFiles.length === 0) {
+      return sendModerationTextMessage(params);
+    }
 
-  if (params.mediaFiles.length === 1) {
-    return sendSingleMediaMessage(params, params.mediaFiles[0]);
-  }
+    if (params.mediaFiles.length === 1) {
+      return sendSingleMediaMessage(params, params.mediaFiles[0]);
+    }
 
-  return sendMediaAlbumWithControlMessage(params);
+    return sendMediaAlbumWithControlMessage(params);
+  } catch (error) {
+    if (!isRequestTooLargeError(error)) {
+      throw error;
+    }
+
+    console.warn("Moderation media request is too large, sending text-only draft");
+
+    return sendModerationTextMessage({
+      ...params,
+      text: appendText(
+        params.text,
+        "[Служебно: медиа не отправлено в черновик из-за размера.]",
+      ),
+      mediaFiles: [],
+    });
+  }
 }
 
 function assertModerationEnv(): void {
@@ -50,10 +68,6 @@ function assertModerationEnv(): void {
   // Поэтому проверяем их здесь, а не при старте всего приложения.
   if (!env.telegram.botToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is required");
-  }
-
-  if (!env.telegram.moderationChannelId) {
-    throw new Error("TELEGRAM_MODERATION_CHANNEL_ID is required");
   }
 }
 
@@ -63,7 +77,7 @@ async function sendModerationTextMessage(
   const text = params.text?.trim() || "Пост без текста";
 
   const response = await postJson<TelegramMessageResult>("sendMessage", {
-    chat_id: env.telegram.moderationChannelId,
+    chat_id: params.chatId,
     text,
     reply_markup: createModerationKeyboard(params.postId),
   });
@@ -79,7 +93,7 @@ async function sendSingleMediaMessage(
   const mediaFieldName = mediaFile.type === "PHOTO" ? "photo" : "video";
   const method = mediaFile.type === "PHOTO" ? "sendPhoto" : "sendVideo";
 
-  formData.append("chat_id", env.telegram.moderationChannelId);
+  formData.append("chat_id", params.chatId);
   formData.append(mediaFieldName, await createFileBlob(mediaFile), mediaFile.fileName);
 
   if (params.text?.trim()) {
@@ -99,7 +113,7 @@ async function sendMediaAlbumWithControlMessage(
   const formData = new FormData();
   const media = [];
 
-  formData.append("chat_id", env.telegram.moderationChannelId);
+  formData.append("chat_id", params.chatId);
 
   for (const [index, mediaFile] of params.mediaFiles.entries()) {
     const fieldName = `file${index}`;
@@ -122,7 +136,7 @@ async function sendMediaAlbumWithControlMessage(
   const firstAlbumMessageId = albumMessages[0]?.message_id;
 
   const controlMessage = await postJson<TelegramMessageResult>("sendMessage", {
-    chat_id: env.telegram.moderationChannelId,
+    chat_id: params.chatId,
     text: getControlMessageText(params),
     reply_parameters: firstAlbumMessageId
       ? {
@@ -204,6 +218,16 @@ async function parseTelegramResponse<T>(response: Response): Promise<T> {
   }
 
   return data.result;
+}
+
+function isRequestTooLargeError(error: unknown): boolean {
+  return error instanceof Error && /request entity too large/i.test(error.message);
+}
+
+function appendText(text: string | null, suffix: string): string {
+  const trimmedText = text?.trim();
+
+  return trimmedText ? `${trimmedText}\n\n${suffix}` : suffix;
 }
 
 function getBotApiUrl(method: string): string {

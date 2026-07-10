@@ -1,13 +1,18 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import prisma from "@/app/prisma";
+import env from "@/app/env";
 import { createTelegramClient } from "@/modules/telegram/collector/telegram.client";
 import {
   ModerationMediaFile,
   sendPostToModerationChannel,
 } from "@/modules/telegram/moderation/telegram-moderation.client";
 import { preparePostTextForModeration } from "@/modules/telegram/moderation/moderation-text.service";
+
+const MAX_MODERATION_UPLOAD_BYTES = 45 * 1024 * 1024;
+const MEDIA_SKIPPED_NOTE =
+  "[Служебно: часть медиа не отправлена в черновик из-за размера.]";
 
 export type DownloadedMediaFile = ModerationMediaFile & {
   path: string;
@@ -28,6 +33,7 @@ export type PostWithTelegramMedia = NonNullable<
     name: string;
     telegram: {
       channelName: string | null;
+      metadata?: unknown;
     } | null;
   };
 };
@@ -78,12 +84,17 @@ export async function sendPostToModeration(postId: string): Promise<void> {
 
   try {
     const mediaFiles = await downloadPostMedia(post as PostWithTelegramMedia, tempDirectory);
+    const moderationMedia = await limitModerationMediaFiles(mediaFiles);
     const draftText =
       post.moderation?.draftText ??
       (await preparePostTextForModeration(post.text, {
         sourceName: post.source.name,
         sourceChannelName: post.source.telegram?.channelName,
       }));
+    const moderationText =
+      moderationMedia.skippedCount > 0
+        ? appendServiceNote(draftText, MEDIA_SKIPPED_NOTE)
+        : draftText;
 
     if (!post.moderation) {
       await prisma.postModeration.create({
@@ -108,8 +119,9 @@ export async function sendPostToModeration(postId: string): Promise<void> {
     // поэтому состояние базы меняем только после успешной отправки.
     const draftMessageId = await sendPostToModerationChannel({
       postId: post.id,
-      text: draftText,
-      mediaFiles,
+      chatId: getModerationChannelId(post as PostWithTelegramMedia),
+      text: moderationText,
+      mediaFiles: moderationMedia.files,
     });
 
     // Одной транзакцией фиксируем два факта:
@@ -235,6 +247,66 @@ export async function downloadPostMedia(
   } finally {
     await client.disconnect();
   }
+}
+
+async function limitModerationMediaFiles(
+  mediaFiles: DownloadedMediaFile[],
+): Promise<{ files: DownloadedMediaFile[]; skippedCount: number }> {
+  const files: DownloadedMediaFile[] = [];
+  let totalBytes = 0;
+  let skippedCount = 0;
+
+  for (const mediaFile of mediaFiles) {
+    const fileSize = (await stat(mediaFile.path)).size;
+
+    if (
+      fileSize > MAX_MODERATION_UPLOAD_BYTES ||
+      totalBytes + fileSize > MAX_MODERATION_UPLOAD_BYTES
+    ) {
+      skippedCount += 1;
+      console.warn(
+        `Skip moderation media ${mediaFile.fileName}: ${fileSize} bytes is too large`,
+      );
+      continue;
+    }
+
+    files.push(mediaFile);
+    totalBytes += fileSize;
+  }
+
+  return {
+    files,
+    skippedCount,
+  };
+}
+
+function appendServiceNote(text: string | null, note: string): string {
+  const trimmedText = text?.trim();
+
+  return trimmedText ? `${trimmedText}\n\n${note}` : note;
+}
+
+function getModerationChannelId(post: PostWithTelegramMedia): string {
+  const metadata = post.source.telegram?.metadata;
+  const sourceModerationChannelId =
+    isRecord(metadata) && typeof metadata.moderationChannelId === "string"
+      ? metadata.moderationChannelId.trim()
+      : "";
+
+  const moderationChannelId =
+    sourceModerationChannelId || env.telegram.moderationChannelId;
+
+  if (!moderationChannelId) {
+    throw new Error(
+      `Cannot send post ${post.id} to moderation: moderation channel is not configured`,
+    );
+  }
+
+  return moderationChannelId;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function getMessageIdFromExternalId(externalId: string): number | null {

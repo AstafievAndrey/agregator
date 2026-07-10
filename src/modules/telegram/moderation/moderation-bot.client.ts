@@ -33,7 +33,7 @@ export async function getCallbackUpdates(offset?: number): Promise<TelegramUpdat
     allowed_updates: ["callback_query"],
   };
 
-  return postJson<TelegramUpdate[]>("getUpdates", body);
+  return postJson<TelegramUpdate[]>("getUpdates", body, 35_000);
 }
 
 export async function answerCallbackQuery(
@@ -44,7 +44,7 @@ export async function answerCallbackQuery(
     callback_query_id: callbackQueryId,
     text,
     show_alert: false,
-  });
+  }, 5_000);
 }
 
 export async function removeMessageKeyboard(
@@ -54,10 +54,14 @@ export async function removeMessageKeyboard(
   await postJson<boolean>("editMessageReplyMarkup", {
     chat_id: chatId,
     message_id: messageId,
-  });
+  }, 10_000);
 }
 
-async function postJson<T>(method: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  method: string,
+  body: unknown,
+  timeoutMs = 15_000,
+): Promise<T> {
   assertBotEnv();
 
   const response = await fetch(getBotApiUrl(method), {
@@ -66,6 +70,7 @@ async function postJson<T>(method: string, body: unknown): Promise<T> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   const data = (await response.json()) as TelegramApiResponse<T>;

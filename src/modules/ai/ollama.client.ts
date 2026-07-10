@@ -16,8 +16,8 @@ export async function generateWithOllama(prompt: string): Promise<string> {
       stream: false,
       keep_alive: "10m",
       options: {
-        temperature: 0.35,
-        num_predict: 350,
+        temperature: 0.1,
+        num_predict: 250,
       },
     }),
     signal: AbortSignal.timeout(env.ai.ollamaTimeoutMs),

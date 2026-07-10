@@ -7,6 +7,9 @@ import {
 } from "@/modules/telegram/moderation/moderation-bot.client";
 import { enqueuePublication } from "@/modules/telegram/publication/publication.enqueue";
 
+const MEDIA_SKIPPED_NOTE_PATTERN =
+  /\n*\[Служебно: часть медиа не отправлена в черновик из-за размера\.\]\s*$/u;
+
 type ModerationAction = "publish" | "reject";
 
 type ParsedCallbackData = {
@@ -24,19 +27,24 @@ export async function startModerationBot(): Promise<void> {
       const updates = await getCallbackUpdates(offset);
 
       for (const update of updates) {
-        offset = update.update_id + 1;
-
         if (!update.callback_query) {
+          offset = update.update_id + 1;
           continue;
         }
 
-        await handleModerationCallback(update.callback_query);
+        try {
+          await handleModerationCallback(update.callback_query);
+        } catch (error) {
+          console.error("Moderation callback failed");
+          console.error(error);
+        } finally {
+          offset = update.update_id + 1;
+        }
       }
     } catch (error) {
       console.error("Moderation bot polling failed");
       console.error(error);
 
-      // Небольшая пауза защищает от бесконечного tight loop, если Telegram API временно недоступен.
       await delay(3_000);
     }
   }
@@ -79,33 +87,39 @@ async function rejectPost(
   }
 
   if (post.moderation.status !== "SENT") {
-    await removeKeyboardIfPossible(callbackQuery);
     await answerCallbackQuery(callbackQuery.id, "Пост уже обработан");
+    await removeKeyboardIfPossible(callbackQuery);
     return;
   }
 
-  await prisma.$transaction([
-    prisma.postModeration.update({
-      where: {
-        postId: post.id,
-      },
-      data: {
-        status: "REJECTED",
-        moderatedAt: new Date(),
-      },
-    }),
-    prisma.post.update({
-      where: {
-        id: post.id,
-      },
-      data: {
-        status: "REJECTED",
-      },
-    }),
-  ]);
+  await answerCallbackQuery(callbackQuery.id, "Отклоняю...");
+
+  const updatedModeration = await prisma.postModeration.updateMany({
+    where: {
+      postId: post.id,
+      status: "SENT",
+    },
+    data: {
+      status: "REJECTED",
+      moderatedAt: new Date(),
+    },
+  });
+
+  if (updatedModeration.count === 0) {
+    await removeKeyboardIfPossible(callbackQuery);
+    return;
+  }
+
+  await prisma.post.update({
+    where: {
+      id: post.id,
+    },
+    data: {
+      status: "REJECTED",
+    },
+  });
 
   await removeKeyboardIfPossible(callbackQuery);
-  await answerCallbackQuery(callbackQuery.id, "Пост отклонен");
 }
 
 async function approvePost(
@@ -138,8 +152,8 @@ async function approvePost(
   }
 
   if (post.moderation.status !== "SENT") {
-    await removeKeyboardIfPossible(callbackQuery);
     await answerCallbackQuery(callbackQuery.id, "Пост уже обработан");
+    await removeKeyboardIfPossible(callbackQuery);
     return;
   }
 
@@ -153,15 +167,18 @@ async function approvePost(
     return;
   }
 
+  await answerCallbackQuery(callbackQuery.id, "Принял в публикацию...");
+
   const draftText = getEditedDraftText(
     callbackQuery,
     moderation.draftText ?? post.text,
   );
 
   const publications = await prisma.$transaction(async (transaction) => {
-    await transaction.postModeration.update({
+    const updatedModeration = await transaction.postModeration.updateMany({
       where: {
         postId: post.id,
+        status: "SENT",
       },
       data: {
         status: "APPROVED",
@@ -169,6 +186,10 @@ async function approvePost(
         moderatedAt: new Date(),
       },
     });
+
+    if (updatedModeration.count === 0) {
+      return [];
+    }
 
     await transaction.postPublication.createMany({
       data: destinationIds.map((destinationId) => ({
@@ -198,7 +219,6 @@ async function approvePost(
   }
 
   await removeKeyboardIfPossible(callbackQuery);
-  await answerCallbackQuery(callbackQuery.id, "Пост отправлен на публикацию");
 }
 
 function parseCallbackData(data: string | undefined): ParsedCallbackData | null {
@@ -222,9 +242,9 @@ function getEditedDraftText(
   callbackQuery: TelegramCallbackQuery,
   originalText: string | null,
 ): string | null {
-  // Если пользователь отредактировал сообщение в черновом канале,
-  // Telegram пришлет актуальный text/caption в callback_query.message.
-  const currentText = callbackQuery.message?.text ?? callbackQuery.message?.caption ?? null;
+  const currentText = stripServiceNotes(
+    callbackQuery.message?.text ?? callbackQuery.message?.caption ?? null,
+  );
 
   if (!currentText?.trim()) {
     return null;
@@ -235,6 +255,10 @@ function getEditedDraftText(
   }
 
   return currentText;
+}
+
+function stripServiceNotes(text: string | null): string | null {
+  return text?.replace(MEDIA_SKIPPED_NOTE_PATTERN, "").trim() || null;
 }
 
 async function removeKeyboardIfPossible(
@@ -252,7 +276,6 @@ async function removeKeyboardIfPossible(
   }
 
   try {
-    // После обработки убираем кнопки, чтобы повторное нажатие было менее вероятно.
     await removeMessageKeyboard(chatId, callbackQuery.message.message_id);
   } catch (error) {
     console.error("Failed to remove moderation keyboard");

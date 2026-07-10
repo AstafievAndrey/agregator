@@ -6,6 +6,7 @@ model TelegramSource {
 
   channelName String?
   telegramId  BigInt?
+  metadata    Json?
 
   lastSyncedMessageId Int?
 

@@ -1,18 +1,27 @@
 # Agregator
 
-Агрегатор Telegram-каналов с модерацией, очисткой текста через AI и публикацией в целевые каналы.
+Агрегатор Telegram-каналов с модерацией, очисткой текста через Ollama и публикацией в целевые каналы.
 
 Стек: Node.js 22, TypeScript, Prisma 7, PostgreSQL 18, Redis, BullMQ, GramJS, Telegram Bot API.
 
-## Первый запуск
+## Что Запускается
 
-Создать локальный файл окружения:
+- `postgres` - база данных.
+- `redis` - очереди BullMQ.
+- `app` - служебный контейнер для Prisma, seed, build и разовых команд.
+- `telegram-runtime` - основной процесс: сбор постов, отправка в модерацию, bot callbacks, публикация.
+
+На этой машине используется `docker-compose`, не `docker compose`.
+
+## Первый Запуск
+
+Создать `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Заполнить обязательные Telegram-переменные в `.env`:
+Заполнить обязательные переменные:
 
 ```bash
 TELEGRAM_API_ID=
@@ -22,7 +31,16 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_MODERATION_CHANNEL_ID=
 ```
 
-Опциональные настройки Ollama. По умолчанию Docker-контейнер ожидает, что Ollama запущена на хостовой машине:
+Если `TELEGRAM_SESSION` ещё нет, сначала поднять контейнеры и выполнить логин:
+
+```bash
+docker-compose up -d --build
+docker-compose exec app npm run telegram:login
+```
+
+Полученную session-строку вставить в `.env`.
+
+Настройки Ollama опциональны. По умолчанию контейнер ходит в Ollama на хосте:
 
 ```bash
 OLLAMA_ENABLED=true
@@ -31,39 +49,26 @@ OLLAMA_MODEL=qwen2.5:1.5b
 OLLAMA_TIMEOUT_MS=60000
 ```
 
-Собрать и запустить все контейнеры:
+Применить миграции и seed:
+
+```bash
+docker-compose exec app npx prisma migrate deploy
+docker-compose exec app npx tsx prisma/seed.ts
+```
+
+## Обычный Запуск
+
+Запустить всё:
+
+```bash
+docker-compose up -d
+```
+
+Запустить с пересборкой образов:
 
 ```bash
 docker-compose up -d --build
 ```
-
-Запустить миграции и seed каналов:
-
-```bash
-docker-compose exec app npm run prisma:migrate
-docker-compose exec app npx tsx prisma/seed.ts
-```
-
-Если `TELEGRAM_SESSION` пустой, один раз выполнить логин и вставить полученную session-строку в `.env`:
-
-```bash
-docker-compose exec app npm run telegram:login
-```
-
-После изменения `.env` пересоздать runtime-контейнер:
-
-```bash
-docker-compose up -d --force-recreate telegram-runtime
-```
-
-## Что запускается
-
-- `app`: служебный контейнер для Prisma, сборки, seed и разовых скриптов.
-- `telegram-runtime`: основной процесс. Внутри него работают сбор постов, модерация, бот модерации и публикация.
-- `postgres`: база данных, по умолчанию доступна на `localhost:5433`.
-- `redis`: очереди, по умолчанию доступен на `localhost:6380`.
-
-## Основные команды
 
 Проверить контейнеры:
 
@@ -77,29 +82,102 @@ docker-compose ps
 docker-compose logs -f --tail=200 telegram-runtime
 ```
 
-Перезапустить только Telegram runtime:
+## Перезапуск
+
+Перезапустить только основной Telegram runtime:
 
 ```bash
 docker-compose restart telegram-runtime
 ```
 
-Перезапустить все контейнеры:
+Перезапустить всё:
 
 ```bash
 docker-compose restart
 ```
 
-Пересобрать и перезапустить после изменений в коде:
+После изменения `.env` лучше пересоздать runtime:
+
+```bash
+docker-compose up -d --force-recreate telegram-runtime
+```
+
+После изменения Dockerfile, зависимостей или `docker-compose.yml`:
 
 ```bash
 docker-compose up -d --build
 ```
 
-Удалить старые контейнеры, которых уже нет в `docker-compose.yml`:
+Убрать старые контейнеры, которых уже нет в `docker-compose.yml`:
 
 ```bash
 docker-compose up -d --remove-orphans
 ```
+
+## Каналы И Seed
+
+Каналы, источники и связи source -> destination настраиваются здесь:
+
+```text
+prisma/seeds/channels.config.ts
+```
+
+После изменения конфига каналов применить seed:
+
+```bash
+docker-compose exec app npx tsx prisma/seed.ts
+```
+
+Если добавлялись новые поля в Prisma-схему, сначала применить миграции:
+
+```bash
+docker-compose exec app npx prisma migrate deploy
+docker-compose exec app npx tsx prisma/seed.ts
+```
+
+Для source можно указать отдельный черновик модерации:
+
+```ts
+{
+  name: "Угарный источник",
+  channelName: "source_channel",
+  moderationChannelId: "-1001234567890",
+}
+```
+
+Если `moderationChannelId` не указан, используется дефолтный черновик из `.env`:
+
+```bash
+TELEGRAM_MODERATION_CHANNEL_ID=
+```
+
+## Диагностика
+
+Общий статус БД и очередей:
+
+```bash
+docker-compose exec app npm run status
+```
+
+Ошибки, failed-задачи и отклонённые посты:
+
+```bash
+docker-compose exec app npm run status:failed
+```
+
+Проверить TypeScript-сборку:
+
+```bash
+docker-compose exec app npm run build
+```
+
+Локально в PowerShell, если `npm` заблокирован execution policy:
+
+```bash
+npm.cmd run build
+```
+
+## Остановка
 
 Остановить контейнеры без удаления данных:
 
@@ -113,24 +191,4 @@ docker-compose down
 docker-compose down -v
 ```
 
-## Команды для разработки
-
-```bash
-docker-compose exec app npm run build
-docker-compose exec app npm run prisma:generate
-docker-compose exec app npm run prisma:migrate
-docker-compose exec app npx tsx prisma/seed.ts
-```
-
-В Windows PowerShell для локальных команд можно использовать `npm.cmd`, если обычный `npm` заблокирован execution policy:
-
-```bash
-npm.cmd run build
-```
-
-## Заметки
-
-- На этой машине используется `docker-compose`, а не `docker compose`.
-- После изменения каналов в `prisma/seeds/telegram-sources.seed.ts` нужно снова запустить `docker-compose exec app npx tsx prisma/seed.ts`.
-- Если Ollama отвечает долго или недоступна, модерация использует локальную очистку текста, а задача продолжает выполняться.
-- В канал модерации уходит уже очищенный текст. После подтверждения publication worker публикует пост в настроенные целевые каналы и добавляет подпись целевого канала в конец.
+`down -v` удаляет данные БД и Redis. Использовать только если точно нужно начать с чистого состояния.

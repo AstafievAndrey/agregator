@@ -1,9 +1,15 @@
 import prisma from "@/app/prisma";
+import {
+  telegramChannelsConfig,
+  type TelegramDestinationConfig,
+  type TelegramSourceConfig,
+} from "./channels.config";
 
 type TelegramSourceSeed = {
   id: string;
   name: string;
   channelName: string;
+  metadata?: Record<string, string>;
 };
 
 type TelegramDestinationSeed = {
@@ -11,104 +17,18 @@ type TelegramDestinationSeed = {
   name: string;
   channelId: string;
   channelName: string | null;
+  metadata?: Record<string, string>;
   sources: TelegramSourceSeed[];
 };
 
-const telegramDestinations: TelegramDestinationSeed[] = [
-  {
-    id: "telegram_milie_lapki",
-    name: "Милые лапки",
-    channelId: "-1003746675714",
-    channelName: "milie_lapki",
-    sources: [
-      {
-        id: "telegram_sobakech_sobaki",
-        name: "Собакеч | Собаки",
-        channelName: "sobakech_sobaki",
-      },
-      {
-        id: "telegram_bezkotika",
-        name: "Без кота и жизнь не та",
-        channelName: "Bezkotika",
-      },
-      {
-        id: "telegram_koshkii_kotiki",
-        name: "шерстяные проказники - коты",
-        channelName: "koshkii_kotiki",
-      },
-    ],
-  },
-  {
-    id: "telegram_ugarniy_ceh",
-    name: "Угарный цех",
-    channelId: "-1003856108401",
-    channelName: "ugarniy_ceh",
-    sources: [
-      {
-        id: "telegram_memachh",
-        name: "memachh",
-        channelName: "memachh",
-      },
-      {
-        id: "telegram_twitt_ota",
-        name: "twitt_ota",
-        channelName: "twitt_ota",
-      },
-      {
-        id: "telegram_leoday",
-        name: "leoday",
-        channelName: "leoday",
-      },
-      {
-        id: "telegram_why4ch",
-        name: "why4ch",
-        channelName: "why4ch",
-      },
-    ],
-  },
-  {
-    id: "telegram_realbrainrotdaily",
-    name: "Real Brain Rot Daily",
-    channelId: "-1004460851552",
-    channelName: "realbrainrotdaily",
-    sources: [
-      {
-        id: "telegram_thememetimes",
-        name: "thememetimes",
-        channelName: "thememetimes",
-      },
-      {
-        id: "telegram_funnyvideos",
-        name: "funnyvideos",
-        channelName: "funnyvideos",
-      },
-      {
-        id: "telegram_memeburst9",
-        name: "memeburst9",
-        channelName: "memeburst9",
-      },
-      {
-        id: "telegram_guffawbox",
-        name: "guffawbox",
-        channelName: "guffawbox",
-      },
-      {
-        id: "telegram_laughquake_und",
-        name: "laughquake_und",
-        channelName: "laughquake_und",
-      },
-    ],
-  },
-];
-
 export async function seedTelegramSources(): Promise<void> {
-  await upsertTelegramSource({
-    id: "telegram_test_channel_monit",
-    name: "Тестовый ТГК",
-    channelName: "test_channel_monit",
-  });
+  for (const source of telegramChannelsConfig.standaloneSources ?? []) {
+    await upsertTelegramSource(normalizeTelegramSource(source));
+  }
 
-  for (const destination of telegramDestinations) {
+  for (const destinationConfig of telegramChannelsConfig.destinations) {
+    const destination = normalizeTelegramDestination(destinationConfig);
+
     await upsertTelegramDestination(destination);
 
     for (const source of destination.sources) {
@@ -116,6 +36,47 @@ export async function seedTelegramSources(): Promise<void> {
       await linkSourceToDestination(source.id, destination.id);
     }
   }
+}
+
+function normalizeTelegramDestination(
+  destination: TelegramDestinationConfig,
+): TelegramDestinationSeed {
+  const metadata = {
+    ...(destination.footerText ? { footerText: destination.footerText } : {}),
+    ...(destination.footerUrl ? { footerUrl: destination.footerUrl } : {}),
+  };
+
+  return {
+    id: destination.id ?? createTelegramId(destination.channelName ?? destination.name),
+    name: destination.name,
+    channelId: destination.channelId,
+    channelName: destination.channelName,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    sources: destination.sources.map(normalizeTelegramSource),
+  };
+}
+
+function normalizeTelegramSource(source: TelegramSourceConfig): TelegramSourceSeed {
+  const sourceConfig =
+    typeof source === "string" ? { channelName: source } : source;
+
+  return {
+    id: sourceConfig.id ?? createTelegramId(sourceConfig.channelName),
+    name: sourceConfig.name ?? sourceConfig.channelName,
+    channelName: sourceConfig.channelName,
+    metadata: sourceConfig.moderationChannelId
+      ? { moderationChannelId: sourceConfig.moderationChannelId }
+      : undefined,
+  };
+}
+
+function createTelegramId(value: string): string {
+  return `telegram_${value
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
 }
 
 async function upsertTelegramSource(source: TelegramSourceSeed): Promise<void> {
@@ -130,9 +91,11 @@ async function upsertTelegramSource(source: TelegramSourceSeed): Promise<void> {
         upsert: {
           create: {
             channelName: source.channelName,
+            metadata: source.metadata,
           },
           update: {
             channelName: source.channelName,
+            metadata: source.metadata,
           },
         },
       },
@@ -145,6 +108,7 @@ async function upsertTelegramSource(source: TelegramSourceSeed): Promise<void> {
       telegram: {
         create: {
           channelName: source.channelName,
+          metadata: source.metadata,
         },
       },
     },
@@ -167,11 +131,13 @@ async function upsertTelegramDestination(
             name: destination.name,
             channelId: destination.channelId,
             channelName: destination.channelName,
+            metadata: destination.metadata,
           },
           update: {
             name: destination.name,
             channelId: destination.channelId,
             channelName: destination.channelName,
+            metadata: destination.metadata,
           },
         },
       },
@@ -186,6 +152,7 @@ async function upsertTelegramDestination(
           name: destination.name,
           channelId: destination.channelId,
           channelName: destination.channelName,
+          metadata: destination.metadata,
         },
       },
     },
