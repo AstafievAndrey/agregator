@@ -3,6 +3,7 @@ import env from "@/app/env";
 import { redisConnection } from "@/app/queue";
 import { collectTelegramSource } from "@/modules/telegram/collector/telegram.collector";
 import { CollectTelegramSourceJobData } from "@/modules/telegram/collector/telegram.queue";
+import { runWithTimeout } from "@/app/timeout";
 
 export function startTelegramWorker(): Worker<CollectTelegramSourceJobData> {
   // Worker получает только sourceId, а актуальные настройки всегда читает из БД.
@@ -12,7 +13,11 @@ export function startTelegramWorker(): Worker<CollectTelegramSourceJobData> {
       console.log(`Start Telegram job: ${job.id}`);
       console.log(`Source id: ${job.data.sourceId}`);
 
-      await collectTelegramSource(job.data.sourceId);
+      await runWithTimeout(
+        (signal) => collectTelegramSource(job.data.sourceId, signal),
+        env.telegram.jobTimeoutMs,
+        `Telegram collection job ${job.id}`,
+      );
 
       console.log(`Completed Telegram job: ${job.id}`);
     },

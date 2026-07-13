@@ -2,6 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prisma from "@/app/prisma";
+import env from "@/app/env";
+import { deleteMessage } from "@/modules/telegram/moderation/moderation-bot.client";
 import {
   downloadPostMedia,
   PostWithTelegramMedia,
@@ -14,6 +16,7 @@ type PublicationWithPost = NonNullable<
   post: PostWithTelegramMedia & {
     moderation: {
       draftText: string | null;
+      draftMessageId: string | null;
     } | null;
   };
   destination: {
@@ -118,7 +121,11 @@ export async function publishPostPublication(
     });
 
     await markPublicationPublished(typedPublication.id, externalPublicationId);
-    await markPostPublishedIfComplete(typedPublication.postId);
+    const postCompleted = await markPostPublishedIfComplete(typedPublication.postId);
+
+    if (postCompleted) {
+      await deletePublishedModerationMessage(typedPublication);
+    }
 
     console.log(`Publication completed: ${typedPublication.id}`);
   } catch (error) {
@@ -231,7 +238,7 @@ async function markPublicationPublished(
   });
 }
 
-async function markPostPublishedIfComplete(postId: string): Promise<void> {
+async function markPostPublishedIfComplete(postId: string): Promise<boolean> {
   // Общий Post становится PUBLISHED только после успешной отправки
   // во все связанные с его источником направления.
   const failedOrPendingPublication = await prisma.postPublication.findFirst({
@@ -247,18 +254,56 @@ async function markPostPublishedIfComplete(postId: string): Promise<void> {
   });
 
   if (failedOrPendingPublication) {
-    return;
+    return false;
   }
 
-  await prisma.post.update({
+  await prisma.post.updateMany({
     where: {
       id: postId,
+      status: {
+        not: "PUBLISHED",
+      },
     },
     data: {
       status: "PUBLISHED",
       publishedAt: new Date(),
     },
   });
+
+  // Очистку черновика нужно пробовать и при повторно взятой задаче: статус Post
+  // мог стать PUBLISHED до перезапуска процесса, а Telegram-сообщение остаться.
+  return true;
+}
+
+async function deletePublishedModerationMessage(
+  publication: PublicationWithPost,
+): Promise<void> {
+  const draftMessageId = publication.post.moderation?.draftMessageId;
+  const metadata = publication.post.source.telegram?.metadata;
+  const sourceModerationChannelId =
+    isRecord(metadata) && typeof metadata.moderationChannelId === "string"
+      ? metadata.moderationChannelId.trim()
+      : "";
+  const moderationChannelId =
+    sourceModerationChannelId || env.telegram.moderationChannelId;
+
+  if (!draftMessageId || !moderationChannelId) {
+    console.error(`Cannot delete moderation message for post ${publication.postId}: message or channel is empty`);
+    return;
+  }
+
+  try {
+    await deleteMessage(moderationChannelId, draftMessageId);
+  } catch (error) {
+    // Публикация уже завершена успешно; ошибка очистки черновика не должна
+    // переводить её в FAILED и провоцировать повторную отправку материала.
+    console.error(`Failed to delete published moderation message for post ${publication.postId}`);
+    console.error(error);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function cancelPublication(

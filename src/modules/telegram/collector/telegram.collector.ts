@@ -48,16 +48,27 @@ export async function collectTelegramPosts(): Promise<void> {
   }
 }
 
-export async function collectTelegramSource(sourceId: string): Promise<void> {
+export async function collectTelegramSource(
+  sourceId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const client = createTelegramClient();
+  const abortClient = () => void client.destroy().catch(logDestroyError);
 
-  await client.connect();
+  signal?.addEventListener("abort", abortClient, { once: true });
 
   try {
+    await client.connect();
     await collectTelegramSourceWithClient(client, sourceId);
   } finally {
-    await client.disconnect();
+    signal?.removeEventListener("abort", abortClient);
+    await client.destroy();
   }
+}
+
+function logDestroyError(error: unknown): void {
+  console.error("Failed to destroy timed out Telegram client");
+  console.error(error);
 }
 
 async function collectTelegramSourceWithClient(

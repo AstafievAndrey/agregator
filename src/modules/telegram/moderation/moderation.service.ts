@@ -38,7 +38,10 @@ export type PostWithTelegramMedia = NonNullable<
   };
 };
 
-export async function sendPostToModeration(postId: string): Promise<void> {
+export async function sendPostToModeration(
+  postId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   // Загружаем пост вместе с модерацией, вложениями и Telegram-источником.
   // Так worker сразу понимает: можно ли отправлять пост и откуда скачать медиа.
   const post = await prisma.post.findUnique({
@@ -83,7 +86,11 @@ export async function sendPostToModeration(postId: string): Promise<void> {
   const tempDirectory = await mkdtemp(join(tmpdir(), "agregator-media-"));
 
   try {
-    const mediaFiles = await downloadPostMedia(post as PostWithTelegramMedia, tempDirectory);
+    const mediaFiles = await downloadPostMedia(
+      post as PostWithTelegramMedia,
+      tempDirectory,
+      signal,
+    );
     const moderationMedia = await limitModerationMediaFiles(mediaFiles);
     const draftText =
       post.moderation?.draftText ??
@@ -163,6 +170,7 @@ export async function sendPostToModeration(postId: string): Promise<void> {
 export async function downloadPostMedia(
   post: PostWithTelegramMedia,
   tempDirectory: string,
+  signal?: AbortSignal,
 ): Promise<DownloadedMediaFile[]> {
   if (post.attachments.length === 0) {
     return [];
@@ -175,10 +183,12 @@ export async function downloadPostMedia(
   }
 
   const client = createTelegramClient();
+  const abortClient = () => void client.destroy().catch(logDestroyError);
 
-  await client.connect();
+  signal?.addEventListener("abort", abortClient, { once: true });
 
   try {
+    await client.connect();
     const files: DownloadedMediaFile[] = [];
     const albumMessageIds = await getAlbumMessageIdsForPost(
       client,
@@ -245,8 +255,14 @@ export async function downloadPostMedia(
 
     return files;
   } finally {
-    await client.disconnect();
+    signal?.removeEventListener("abort", abortClient);
+    await client.destroy();
   }
+}
+
+function logDestroyError(error: unknown): void {
+  console.error("Failed to destroy timed out Telegram media client");
+  console.error(error);
 }
 
 async function limitModerationMediaFiles(

@@ -1,6 +1,7 @@
 import prisma from "@/app/prisma";
 import {
   answerCallbackQuery,
+  deleteMessage,
   getCallbackUpdates,
   removeMessageKeyboard,
   TelegramCallbackQuery,
@@ -122,7 +123,7 @@ async function rejectPost(
     },
   });
 
-  await removeKeyboardIfPossible(callbackQuery);
+  await deleteCallbackMessageIfPossible(callbackQuery);
 }
 
 async function approvePost(
@@ -285,6 +286,25 @@ async function removeKeyboardIfPossible(
     await removeMessageKeyboard(chatId, callbackQuery.message.message_id);
   } catch (error) {
     console.error("Failed to remove moderation keyboard");
+    console.error(error);
+  }
+}
+
+async function deleteCallbackMessageIfPossible(
+  callbackQuery: TelegramCallbackQuery,
+): Promise<void> {
+  const messageId = callbackQuery.message?.message_id;
+  const chatId = callbackQuery.message?.chat?.id;
+
+  if (!messageId || !chatId) {
+    console.error("Failed to delete moderation message: callback message is incomplete");
+    return;
+  }
+
+  try {
+    await deleteMessage(chatId, messageId);
+  } catch (error) {
+    console.error("Failed to delete rejected moderation message");
     console.error(error);
   }
 }

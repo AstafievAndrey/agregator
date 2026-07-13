@@ -29,6 +29,7 @@ const env = Object.freeze({
     moderationConcurrency: getNumberEnv("TELEGRAM_MODERATION_CONCURRENCY", 3),
     publicationConcurrency: getNumberEnv("TELEGRAM_PUBLICATION_CONCURRENCY", 3),
     retryBackoffMs: getNumberEnv("TELEGRAM_RETRY_BACKOFF_MS", 10_000),
+    jobTimeoutMs: getNumberEnv("TELEGRAM_JOB_TIMEOUT_MS", 120_000),
   }),
 });
 

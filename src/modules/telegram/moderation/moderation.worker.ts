@@ -3,6 +3,7 @@ import env from "@/app/env";
 import { redisConnection } from "@/app/queue";
 import { SendPostToModerationJobData } from "@/modules/telegram/moderation/moderation.queue";
 import { sendPostToModeration } from "@/modules/telegram/moderation/moderation.service";
+import { runWithTimeout } from "@/app/timeout";
 
 export function startModerationWorker(): Worker<SendPostToModerationJobData> {
   // Worker постоянно слушает очередь moderation и выполняет задачи по одной.
@@ -13,7 +14,11 @@ export function startModerationWorker(): Worker<SendPostToModerationJobData> {
       console.log(`Start moderation job: ${job.id}`);
       console.log(`Post id: ${job.data.postId}`);
 
-      await sendPostToModeration(job.data.postId);
+      await runWithTimeout(
+        (signal) => sendPostToModeration(job.data.postId, signal),
+        env.telegram.jobTimeoutMs,
+        `Moderation job ${job.id}`,
+      );
 
       console.log(`Completed moderation job: ${job.id}`);
     },

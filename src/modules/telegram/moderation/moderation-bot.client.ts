@@ -57,6 +57,16 @@ export async function removeMessageKeyboard(
   }, 10_000);
 }
 
+export async function deleteMessage(
+  chatId: number | string,
+  messageId: number | string,
+): Promise<void> {
+  await postJson<boolean>("deleteMessage", {
+    chat_id: chatId,
+    message_id: messageId,
+  }, 10_000);
+}
+
 async function postJson<T>(
   method: string,
   body: unknown,
