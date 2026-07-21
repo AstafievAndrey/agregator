@@ -8,7 +8,7 @@ import {
   ModerationMediaFile,
   sendPostToModerationChannel,
 } from "@/modules/telegram/moderation/telegram-moderation.client";
-import { preparePostTextForModeration } from "@/modules/telegram/moderation/moderation-text.service";
+import { preparePostTextForModeration } from "@/modules/moderation/moderation-text.service";
 
 const MAX_MODERATION_UPLOAD_BYTES = 45 * 1024 * 1024;
 const MEDIA_SKIPPED_NOTE =

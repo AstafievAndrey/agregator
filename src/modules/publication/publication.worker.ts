@@ -1,8 +1,8 @@
 import { Job, Worker } from "bullmq";
 import env from "@/app/env";
 import { redisConnection } from "@/app/queue";
-import { PublishPostJobData } from "@/modules/telegram/publication/publication.queue";
-import { publishPostPublication } from "@/modules/telegram/publication/publication.service";
+import { PublishPostJobData } from "@/modules/publication/publication.queue";
+import { publishPostPublication } from "@/modules/publication/publication.service";
 
 export function startPublicationWorker(): Worker<PublishPostJobData> {
   // Worker отделяет медленную отправку в Telegram от обработки кнопки модерации.

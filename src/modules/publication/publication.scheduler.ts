@@ -1,4 +1,4 @@
-import { enqueuePendingPublications } from "@/modules/telegram/publication/publication.enqueue";
+import { enqueuePendingPublications } from "@/modules/publication/publication.enqueue";
 import env from "@/app/env";
 
 export function startPublicationScheduler(): void {

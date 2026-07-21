@@ -1,6 +1,6 @@
 import prisma from "@/app/prisma";
 import env from "@/app/env";
-import { publicationQueue } from "@/modules/telegram/publication/publication.queue";
+import { publicationQueue } from "@/modules/publication/publication.queue";
 
 type EnqueuePendingPublicationsOptions = {
   closeConnections?: boolean;
@@ -14,7 +14,9 @@ export async function enqueuePendingPublications(
   // PENDING-записи создаются после одобрения поста в канале модерации.
   const publications = await prisma.postPublication.findMany({
     where: {
-      status: "PENDING",
+      status: {
+        in: ["PENDING", "PUBLISHING"],
+      },
       destination: {
         status: "ACTIVE",
       },

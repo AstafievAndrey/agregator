@@ -6,7 +6,7 @@ import {
   removeMessageKeyboard,
   TelegramCallbackQuery,
 } from "@/modules/telegram/moderation/moderation-bot.client";
-import { enqueuePublication } from "@/modules/telegram/publication/publication.enqueue";
+import { enqueuePublication } from "@/modules/publication/publication.enqueue";
 
 const MEDIA_SKIPPED_NOTE_PATTERN =
   /\n*\[Служебно: часть медиа не отправлена в черновик из-за размера\.\]\s*$/u;

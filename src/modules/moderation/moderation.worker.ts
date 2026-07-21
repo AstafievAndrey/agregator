@@ -1,8 +1,8 @@
 import { Job, Worker } from "bullmq";
 import env from "@/app/env";
 import { redisConnection } from "@/app/queue";
-import { SendPostToModerationJobData } from "@/modules/telegram/moderation/moderation.queue";
-import { sendPostToModeration } from "@/modules/telegram/moderation/moderation.service";
+import { SendPostToModerationJobData } from "@/modules/moderation/moderation.queue";
+import { sendPostToModeration } from "@/modules/moderation/moderation.service";
 import { runWithTimeout } from "@/app/timeout";
 
 export function startModerationWorker(): Worker<SendPostToModerationJobData> {

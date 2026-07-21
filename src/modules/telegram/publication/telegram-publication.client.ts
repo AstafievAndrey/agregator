@@ -1,6 +1,6 @@
 import { openAsBlob } from "node:fs";
 import env from "@/app/env";
-import { DownloadedMediaFile } from "@/modules/telegram/moderation/moderation.service";
+import { DownloadedMediaFile } from "@/modules/moderation/moderation.service";
 
 type SendPostToTelegramDestinationParams = {
   channelId: string;

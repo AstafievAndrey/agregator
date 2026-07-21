@@ -1,4 +1,4 @@
-import { enqueueCollectedPostsForModeration } from "@/modules/telegram/moderation/moderation.enqueue";
+import { enqueueCollectedPostsForModeration } from "@/modules/moderation/moderation.enqueue";
 import env from "@/app/env";
 
 export function startModerationScheduler(): void {

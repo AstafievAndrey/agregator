@@ -7,7 +7,7 @@ import { deleteMessage } from "@/modules/telegram/moderation/moderation-bot.clie
 import {
   downloadPostMedia,
   PostWithTelegramMedia,
-} from "@/modules/telegram/moderation/moderation.service";
+} from "@/modules/moderation/moderation.service";
 import { sendPostToTelegramDestination } from "@/modules/telegram/publication/telegram-publication.client";
 
 type PublicationWithPost = NonNullable<

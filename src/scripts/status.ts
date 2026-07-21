@@ -1,6 +1,6 @@
 import prisma from "@/app/prisma";
-import { moderationQueue } from "@/modules/telegram/moderation/moderation.queue";
-import { publicationQueue } from "@/modules/telegram/publication/publication.queue";
+import { moderationQueue } from "@/modules/moderation/moderation.queue";
+import { publicationQueue } from "@/modules/publication/publication.queue";
 import { telegramQueue } from "@/modules/telegram/collector/telegram.queue";
 
 const mode = process.argv.includes("--failed") ? "failed" : "summary";
